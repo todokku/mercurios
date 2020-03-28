@@ -4,11 +4,11 @@ services:
     server:
         image: bahatron/mercurios_http
         depends_on:
-            - mysql
+            - db
             - nats
         env_file: .env.test
 
-    mysql:
+    db:
         image: mysql:8
         command: --default-authentication-plugin=mysql_native_password
         environment:

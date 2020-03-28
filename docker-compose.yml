@@ -1,14 +1,19 @@
 version: "3.5"
 
 services:
-    mysql:
-        image: mysql:8
-        command: --default-authentication-plugin=mysql_native_password
+    # mysql:
+    #     image: mysql:8
+    #     command: --default-authentication-plugin=mysql_native_password
+    #     ports:
+    #         - ${DOCKER_MYSQL_PORT:-3306}:3306
+    #     environment:
+    #         MYSQL_ROOT_PASSWORD: secret
+    #         MYSQL_DATABASE: mercurios
+    db:
+        image: postgres:12
         ports:
-            - ${DOCKER_MYSQL_PORT:-3306}:3306
-        environment:
-            MYSQL_ROOT_PASSWORD: secret
-            MYSQL_DATABASE: mercurios
+            - 5432:5432
+        env_file: .env.test
 
     nats:
         image: nats
@@ -26,7 +31,7 @@ services:
         ports:
             - ${MERCURIOS_PORT:-4254}:${MERCURIOS_PORT:-4254}
         depends_on:
-            - mysql
+            - db
             - nats
         command: sh -c "npm run build:clean && npm run dev"
         environment:

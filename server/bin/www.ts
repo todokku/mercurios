@@ -3,7 +3,7 @@ import http from "http";
 import expressApp from "../http/server";
 import $logger from "../services/logger";
 import createWsServer from "../websocket/server";
-import $mysql from "../services/mysql";
+import $knex from "../services/knex";
 import $config from "../services/config";
 
 const PORT = parseInt($config.server_port);
@@ -35,7 +35,10 @@ process.on("unhandledRejection", reason => {
 async function start() {
     $logger.debug("Starting server in dev mode");
 
-    await $mysql.migrate.latest().catch(err => {
+    try {
+        await $knex.migrate.latest();
+        HTTP_SERVER.listen(PORT);
+    } catch (err) {
         switch (err.code) {
             case "ER_TABLE_EXISTS_ERROR":
                 $logger.warning(`migration error - table already exists`);
@@ -44,9 +47,7 @@ async function start() {
                 $logger.error(err);
                 process.exit(-10);
         }
-    });
-
-    HTTP_SERVER.listen(PORT);
+    }
 }
 
 start();

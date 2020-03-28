@@ -2,7 +2,7 @@ import $axios from "axios";
 import env from "@bahatron/env";
 import { expect } from "chai";
 import $logger from "@bahatron/logger";
-import $mysql from "../../services/mysql";
+import $knex from "../../services/knex";
 import $nats from "../../services/nats";
 
 const MERCURIOS_TEST_URL = env.get("TEST_URL");
@@ -30,7 +30,7 @@ describe("Feature: publish event", () => {
 
                 let event = await _publishEvent(_topic, payload);
 
-                let result = await $mysql(`stream_${_topic}`)
+                let result = await $knex(`stream_${_topic}`)
                     .where({
                         seq: event.data.seq,
                     })
@@ -86,8 +86,8 @@ describe("Feature: publish event", () => {
 
         before(async () => {
             try {
-                if (await $mysql.schema.hasTable(`stream_${_topic}`)) {
-                    await $mysql(`stream_${_topic}`).truncate();
+                if (await $knex.schema.hasTable(`stream_${_topic}`)) {
+                    await $knex(`stream_${_topic}`).truncate();
                 }
 
                 // await new Promise(resolve => setTimeout(resolve, 5));

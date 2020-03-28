@@ -3,7 +3,7 @@ import env from "@bahatron/env";
 import { expect } from "chai";
 import $logger from "@bahatron/logger";
 import { _publishEvent } from "./publish_event.mocha";
-import $mysql from "../../services/mysql";
+import $knex from "../../services/knex";
 
 const MERCURIOS_TEST_URL = env.get("TEST_URL");
 describe("Feature: read event", () => {
@@ -27,8 +27,8 @@ describe("Feature: read event", () => {
 
         before(async () => {
             try {
-                if (await $mysql.schema.hasTable(`stream_${_topic}`)) {
-                    await $mysql(`stream_${_topic}`).truncate();
+                if (await $knex.schema.hasTable(`stream_${_topic}`)) {
+                    await $knex(`stream_${_topic}`).truncate();
                 }
 
                 await _publishEvent(_topic, "hello", 1);

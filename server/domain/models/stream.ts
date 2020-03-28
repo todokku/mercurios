@@ -1,4 +1,4 @@
-import $mysql from "../../services/mysql";
+import $knex from "../../services/knex";
 import $logger from "../../services/logger";
 import $nats from "../../services/nats";
 import $error from "../../services/error";
@@ -22,31 +22,49 @@ export class Stream {
         this.table = $validator.string(table_name);
     }
 
-    private async transaction(
+    private async appendOrderly(
         expectedSeq: number,
         published_at: string,
         data?: any
     ) {
-        return await $mysql.transaction(async _trx => {
-            let seq = (
-                await _trx(this.table).insert({
-                    published_at,
-                    data: $json.stringify(data),
-                })
-            ).shift();
+        try {
+            return await $knex.transaction(async _trx => {
+                let seq = (
+                    await _trx(this.table)
+                        .insert({
+                            published_at,
+                            data: $json.stringify(data),
+                        })
+                        .returning("seq")
+                ).shift();
 
-            if (!seq) {
-                throw $error.InternalError(`unexpected mysql response`);
-            }
+                if (!seq) {
+                    throw $error.InternalError(`unexpected mysql response`);
+                }
 
-            if (expectedSeq !== seq) {
-                throw $error.ExpectationFailed(
-                    `error writing to stream - expected seq ${expectedSeq} but got ${seq}`
+                if (expectedSeq !== seq) {
+                    throw $error.ExpectationFailed(
+                        `error writing to stream - expected seq ${expectedSeq} but got ${seq}`,
+                        {
+                            expectedSeq,
+                            seq,
+                        }
+                    );
+                }
+
+                return seq;
+            });
+        } catch (err) {
+            $logger.debug("err", err);
+            if (err.name === "ExpectationFailed") {
+                await $knex.raw(
+                    `ALTER SEQUENCE ${this.table}_seq_seq RESTART WITH ${err
+                        .context.seq - 1}`
                 );
             }
 
-            return seq;
-        });
+            throw err;
+        }
     }
 
     public async append(
@@ -54,25 +72,20 @@ export class Stream {
         expectedSeq?: number
     ): Promise<MercuriosEvent> {
         let published_at = $moment().toISOString();
-
-        try {
-            let seq: number = expectedSeq
-                ? await this.transaction(expectedSeq, published_at, data)
-                : await $mysql(this.table).insert({
+        let seq: number = expectedSeq
+            ? await this.appendOrderly(expectedSeq, published_at, data)
+            : await $knex(this.table)
+                  .insert({
                       published_at,
                       data: $json.stringify(data),
-                  });
+                  })
+                  .returning("seq");
 
-            return $event({ topic: this.topic, seq, published_at, data });
-        } catch (err) {
-            await $mysql.raw(`ALTER TABLE ${this.table} auto_increment = 1`);
-
-            throw err;
-        }
+        return $event({ topic: this.topic, seq, published_at, data });
     }
 
     public async read(id: number): Promise<MercuriosEvent | undefined> {
-        let result = await $mysql(this.table)
+        let result = await $knex(this.table)
             .where({ seq: id })
             .first();
 
@@ -105,7 +118,7 @@ const Repository = () => {
         async create(topic: string): Promise<Stream> {
             let table_name = streamTable(topic);
             try {
-                await $mysql.transaction(async trx => {
+                await $knex.transaction(async trx => {
                     if (await trx.schema.hasTable(table_name)) {
                         return;
                     }
@@ -139,7 +152,7 @@ const Repository = () => {
                 return _streams.get(topic) as Stream;
             }
 
-            let result = await $mysql(STREAM_DEFINITIONS)
+            let result = await $knex(STREAM_DEFINITIONS)
                 .where({ topic })
                 .first();
 
@@ -155,11 +168,11 @@ const Repository = () => {
         },
 
         async delete(topic: string): Promise<void> {
-            await $mysql(STREAM_DEFINITIONS)
+            await $knex(STREAM_DEFINITIONS)
                 .where({ topic })
                 .delete();
 
-            await $mysql.schema.dropTableIfExists(streamTable(topic));
+            await $knex.schema.dropTableIfExists(streamTable(topic));
 
             _streams.delete(topic);
 
